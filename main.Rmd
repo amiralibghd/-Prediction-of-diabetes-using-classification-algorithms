@@ -1,0 +1,823 @@
+---
+title: "classification Project"
+author: "Amirali Bagherzade"
+date: "2023-07-08"
+output:
+  html_document: default
+  word_document: default
+---
+
+# packages
+
+```{r}
+library(tibble)
+library(ggplot2)
+library(rpart)
+library(rpart.plot)
+library(caret)
+library(readr)
+library(mlbench)
+library(cowplot)
+library(nnet)
+library(readr)
+library(MASS)
+library(e1071)
+library(pROC)
+library(randomForest)
+```
+
+```{r}
+dpd = read_csv("C:/Users/USER/Desktop/diabetes.csv")
+dpd$hypertension=factor(dpd$hypertension)
+dpd$gender=factor(dpd$gender)
+dpd$smoking_history=factor(dpd$smoking_history)
+dpd$heart_disease=factor(dpd$heart_disease)
+dpd$diabetes=factor(dpd$diabetes)
+```
+
+## barplot of diabetic and non-diabetic
+
+```{r}
+
+diabetics_count = sum(dpd$diabetes == 1)
+non_diabetics_count = sum(dpd$diabetes == 0)
+
+
+df = data.frame(Category = c("Diabetics", "Non-Diabetics"),
+                 Count = c(diabetics_count, non_diabetics_count))
+
+
+ggplot(df, aes(x = Category, y = Count, fill = Category)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = Count), vjust = -0.5) +
+  labs(title = "Number of Diabetics and Non-Diabetics",
+       x = "Category", y = "Count")
+
+```
+
+## barplot of gender
+
+```{r}
+
+
+males_count = sum(dpd$gender == "Male")
+females_count = sum(dpd$gender == "Female")
+
+df = data.frame(Category = c("Male", "Female"),
+                 Count = c(males_count, females_count))
+
+ggplot(df, aes(x = Category, y = Count, fill = Category)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = Count), vjust = -0.5) +
+  labs(title = "Number of Males and Females",
+       x = "Category", y = "Count")
+
+```
+
+## histogram of age
+
+```{r}
+
+
+
+min_age = min(dpd$age)
+max_age = max(dpd$age)
+avg_age = mean(dpd$age)
+
+# Create the histogram
+ggplot(dpd, aes(x = age)) +
+  geom_histogram(binwidth = 5, fill = "steelblue", color = "black") +
+  geom_vline(xintercept = c(min_age, max_age, avg_age),
+             linetype = "dashed", color = c("red", "green", "blue")) +
+  geom_text(aes(x = min_age + 2, y = 10, label = paste0("Min: ", min_age)),
+            color = "red", vjust = -1) +
+  geom_text(aes(x = max_age - 2, y = 10, label = paste0("Max: ", max_age)),
+            color = "green", vjust = -1) +
+  geom_text(aes(x = avg_age, y = 15, label = paste0("Avg: ", round(avg_age, 2))),
+            color = "black", vjust = -1) +
+  labs(title = "Histogram of Age",
+       x = "Age", y = "Frequency")
+
+```
+
+## histogram of blood glucose level
+
+```{r}
+
+min_glucose = min(dpd$blood_glucose_level)
+max_glucose = max(dpd$blood_glucose_level)
+avg_glucose = mean(dpd$blood_glucose_level)
+
+# Create the histogram
+ggplot(dpd, aes(x = dpd$blood_glucose_level)) +
+  geom_histogram(binwidth = 5, fill = "steelblue", color = "black") +
+  geom_vline(xintercept = c(min_glucose, max_glucose, avg_glucose),
+             linetype = "dashed", color = c("red", "green", "blue")) +
+  geom_text(aes(x = min_glucose + 2, y = 10, label = paste0("Min: ", min_glucose)),
+            color = "red", vjust = -1) +
+  geom_text(aes(x = max_glucose - 2, y = 10, label = paste0("Max: ", max_glucose)),
+            color = "green", vjust = -1) +
+  geom_text(aes(x = avg_glucose, y = 15, label = paste0("Avg: ", round(avg_glucose, 2))),
+            color = "black", vjust = -1) +
+  labs(title = "Histogram of Blood Glucose Level",
+       x = "Blood Glucose Level", y = "Frequency")
+
+```
+
+## histogram of HbA1c_level
+
+```{r}
+
+min_HbA1c = min(dpd$HbA1c_level)
+max_HbA1c = max(dpd$HbA1c_level)
+avg_HbA1c = mean(dpd$HbA1c_level)
+
+# Create the histogram
+ggplot(dpd, aes(x = HbA1c_level)) +
+  geom_histogram(binwidth = 0.5, fill = "steelblue", color = "black") +
+  geom_vline(xintercept = c(min_HbA1c, max_HbA1c, avg_HbA1c),
+             linetype = "dashed", color = c("red", "green", "blue")) +
+  geom_text(aes(x = min_HbA1c + 0.2, y = 10, label = paste0("Min: ", min_HbA1c)),
+            color = "black", vjust = -1) +
+  geom_text(aes(x = max_HbA1c - 0.2, y = 10, label = paste0("Max: ", max_HbA1c)),
+            color = "black", vjust = -1) +
+  geom_text(aes(x = avg_HbA1c, y = 15, label = paste0("Avg: ", round(avg_HbA1c, 2))),
+            color = "black", vjust = -1) +
+  labs(title = "Histogram of HbA1c Level",
+       x = "HbA1c Level", y = "Frequency")
+
+```
+
+## Train and test
+
+```{r}
+set.seed(100)
+# tst-trn split data
+dpd_trn_idx = sample(nrow(dpd), size = 0.8 * nrow(dpd))
+dpd_trn = dpd[dpd_trn_idx, ]
+dpd_tst = dpd[-dpd_trn_idx, ]
+
+# est-val split data
+dpd_est_idx = sample(nrow(dpd_trn), size = 0.8 * nrow(dpd_trn))
+dpd_est = dpd_trn[dpd_est_idx, ]
+dpd_val = dpd_trn[-dpd_est_idx, ]
+
+head(dpd_trn)
+```
+
+# EDA
+
+```{r}
+table(dpd_est$gender)
+table(dpd_est$heart_disease)
+table(dpd_est$smoking_history)
+table(dpd_est$diabetes)
+```
+
+# scatter plots
+
+```{r}
+ggplot(
+  data=dpd_est,
+  aes(x = age,y = bmi,group = diabetes,colour = diabetes))+
+    geom_point()
+```
+
+```{r}
+ggplot(
+  data=dpd_est,
+  aes(x = HbA1c_level,y = blood_glucose_level,group = diabetes,colour = diabetes))+
+    geom_point()
+```
+
+```{r}
+ggplot(
+  data=dpd_est,
+  aes(x = bmi,y = blood_glucose_level,group = diabetes,colour = diabetes))+
+    geom_point()
+```
+
+```{r}
+ggplot(
+  data=dpd_est,
+  aes(x = age,y = blood_glucose_level,group = diabetes,colour = diabetes))+
+    geom_point()
+```
+
+```{r}
+ggplot(
+  data=dpd_trn,
+  aes(x = bmi,y =HbA1c_level,group = diabetes,colour = diabetes))+
+    geom_point()
+```
+
+```{r}
+plot1=ggplot(
+  data=dpd_est,
+  aes(x=age,y=diabetes,group=diabetes, colour=diabetes))+
+  geom_point()
+plot2=ggplot(
+  data=dpd_est,
+  aes(x=blood_glucose_level,y=diabetes,group=diabetes, colour=diabetes))+
+  geom_point()
+plot_grid(plot1,plot2, labels=c('age','blood_glucose_level'))
+```
+
+# Models
+
+## calc_missclass
+
+```{r}
+calc_misclass = function(actual, predicted) {
+  mean(actual != predicted)
+}
+```
+
+## KNN
+
+because of 2 classes of diabetes for prediction, it could be better using odd numbers of K. \### Scaling data \### Estimation
+
+```{r}
+dpd_est_scaled = dpd_est
+
+dpd_est_scaled$age = scale(dpd_est_scaled$age)
+age.center = attr(dpd_est_scaled$age,"scaled:center")
+age.scale = attr(dpd_est_scaled$age,"scaled:scale")
+
+dpd_est_scaled$bmi = scale(dpd_est_scaled$bmi)
+bmi.center = attr(dpd_est_scaled$bmi,"scaled:center")
+bmi.scale = attr(dpd_est_scaled$bmi,"scaled:scale")
+
+dpd_est_scaled$HbA1c_level = scale(dpd_est_scaled$HbA1c_level)
+HbA1c_level.center = attr(dpd_est_scaled$HbA1c_level,"scaled:center")
+HbA1c_level.scale = attr(dpd_est_scaled$HbA1c_level,"scaled:scale")
+
+dpd_est_scaled$blood_glucose_level = scale(dpd_est_scaled$blood_glucose_level)
+blood_glucose_level.center = attr(dpd_est_scaled$blood_glucose_level,"scaled:center")
+blood_glucose_level.scale = attr(dpd_est_scaled$blood_glucose_level,"scaled:scale")
+```
+
+### Validation
+
+```{r}
+dpd_val_scaled = dpd_val
+
+dpd_val_scaled$age = scale(dpd_val_scaled$age, center = age.center, scale = age.scale)
+dpd_val_scaled$bmi = scale(dpd_val_scaled$bmi, center = bmi.center, scale = bmi.scale)
+dpd_val_scaled$HbA1c_level = scale(dpd_val_scaled$HbA1c_level, center = HbA1c_level.center, scale = HbA1c_level.scale)
+dpd_val_scaled$blood_glucose_level = scale(dpd_val_scaled$blood_glucose_level, center = blood_glucose_level.center, scale = blood_glucose_level.scale)
+```
+
+```{r}
+
+fit_knn_to_est = function(k, data) {
+  knn3(diabetes ~ ., data = data, k = k)
+}
+
+# k-values
+k_val = seq(1, 101, by = 2)
+# KNN for k 1:100
+scaled_knn_mods = lapply(k_val, fit_knn_to_est, data = dpd_est_scaled)
+non_scaled_knn_mods = lapply(k_val, fit_knn_to_est, data = dpd_est)
+```
+
+### KNN prediction
+
+```{r}
+# make predictions
+non_scaled_knn_preds = lapply(non_scaled_knn_mods, predict, dpd_val, type = "class")
+scaled_knn_preds = lapply(scaled_knn_mods, predict, dpd_val_scaled, type = "class")
+```
+
+### calculate misclass
+
+```{r}
+non_scaled_knn_misclass = sapply(non_scaled_knn_preds, calc_misclass, actual = dpd_val$diabetes)
+scaled_knn_misclass = sapply(scaled_knn_preds, calc_misclass, actual = dpd_val_scaled$diabetes)
+```
+
+### KNN report
+
+```{r}
+knn_misclass_data = data.frame(col1 = k_val, col2 = non_scaled_knn_misclass, col3 = scaled_knn_misclass)
+colnames(knn_misclass_data) = c("K", "non_scaled_missclass", "scaled_missclass")
+print(knn_misclass_data)
+```
+
+```{r}
+ggplot(knn_misclass_data, aes(x = K)) +
+  geom_line(aes(y = non_scaled_missclass,color ='non_scaled_missclass'),linewidth = 1) +
+  geom_line(aes(y = scaled_missclass, color = 'scaled_missclass'),linewidth = 1)+
+  labs(x = 'k', y = 'missclass', color = 'data')
+```
+
+### Best-k
+
+```{r}
+best_k = k_val[which.min(scaled_knn_misclass)]
+best_knn_mod = knn3(diabetes ~ ., data = dpd_est_scaled, k = best_k)
+knn_mis_est = calc_misclass(dpd_est_scaled$diabetes, predict(best_knn_mod,dpd_est_scaled,type = 'class'))
+knn_mis_val = calc_misclass(dpd_val_scaled$diabetes, predict(best_knn_mod,dpd_val_scaled,type = 'class'))
+
+cat("best k is:",best_k,"and the missclassification for estimation is:",knn_mis_est,"and the missclassification for validation is:",knn_mis_val )
+```
+### Actual vs Predicted
+```{r}
+table(predicted = predict(best_knn_mod,dpd_val_scaled,type = 'class'), actual = dpd_val_scaled$diabetes)
+```
+
+## Report
+
+```{r}
+model_selection_df = data.frame("Model" = "Best-KNN",
+                                "EST_missclass" = knn_mis_est,
+                                "VAL_missclass" = knn_mis_val,
+                                row.names = 1)
+
+model_selection_df
+```
+
+## Decision tree
+
+### tree function
+
+```{r}
+fit_tree_to_est = function(cp ,minsplit){
+  rpart(diabetes ~ ., data = dpd_est, cp = cp, minsplit = minsplit)
+}
+```
+
+```{r}
+cp = c(0.001, 0.01, 0.1, 1)
+minsplit = seq(5,30,5)
+tree_cp_0.001 = lapply(minsplit, fit_tree_to_est, cp = 0.001)
+tree_cp_0.01 = lapply(minsplit, fit_tree_to_est, cp = 0.01)
+tree_cp_0.1 = lapply(minsplit, fit_tree_to_est, cp = 0.1)
+tree_cp_1 = lapply(minsplit, fit_tree_to_est, cp = 1)
+```
+
+```{r}
+tree_cp_0.001_pred = lapply(tree_cp_0.001, predict, dpd_val, type = "class")
+tree_cp_0.001_miss = sapply(tree_cp_0.001_pred, calc_misclass, actual = dpd_val$diabetes)
+
+tree_cp_0.01_pred = lapply(tree_cp_0.01, predict, dpd_val, type = "class")
+tree_cp_0.01_miss = sapply(tree_cp_0.01_pred, calc_misclass, actual = dpd_val$diabetes)
+
+tree_cp_0.1_pred = lapply(tree_cp_0.1, predict, dpd_val, type = "class")
+tree_cp_0.1_miss = sapply(tree_cp_0.1_pred, calc_misclass, actual = dpd_val$diabetes)
+
+tree_cp_1_pred = lapply(tree_cp_1, predict, dpd_val, type = "class")
+tree_cp_1_miss = sapply(tree_cp_1_pred, calc_misclass, actual = dpd_val$diabetes)
+```
+
+### Tree report
+
+```{r}
+min_tree_cp_0.001_miss = min(tree_cp_0.001_miss)
+min_tree_cp_0.01_miss = min(tree_cp_0.01_miss)
+min_tree_cp_0.1_miss = min(tree_cp_0.1_miss)
+min_tree_cp_1_miss = min(tree_cp_1_miss)
+
+cp_0.001_minsplit = minsplit[which.min(tree_cp_0.001_miss)]
+cp_0.01_minsplit = minsplit[which.min(tree_cp_0.01_miss)]
+cp_0.1_minsplit = minsplit[which.min(tree_cp_0.1_miss)]
+cp_1_minsplit = minsplit[which.min(tree_cp_1_miss)]
+
+tree_miss_class_df = data.frame(c(min_tree_cp_0.001_miss,min_tree_cp_0.01_miss,min_tree_cp_0.1_miss,min_tree_cp_1_miss),
+c(0.001,0.01,0.1,1),                        c(cp_0.001_minsplit,cp_0.01_minsplit,cp_0.1_minsplit,cp_1_minsplit))
+
+names(tree_miss_class_df) = c("misscalsification", "CP", "minsplit")
+tree_miss_class_df
+```
+
+```{r}
+best_tree_miss_class = min(tree_miss_class_df[,1])
+
+best_cp = tree_miss_class_df$CP[tree_miss_class_df$misscalsification == min(tree_miss_class_df[,1])]
+
+best_minsplit = tree_miss_class_df$minsplit[tree_miss_class_df$misscalsification == min(tree_miss_class_df[,1])]
+
+
+cat("best tree miss calsification is:", best_tree_miss_class,"and best CP:",best_cp,"and best minsplit is:",best_minsplit)
+```
+
+```{r}
+best_tree = rpart(diabetes ~ ., data = dpd_est, cp = best_cp, minsplit = best_minsplit)
+tree_est_mis = calc_misclass(predict(best_tree, dpd_est, type = 'class'), dpd_est$diabetes)
+tree_val_mis = calc_misclass(predict(best_tree, dpd_val,type = 'class'), dpd_val$diabetes)
+```
+
+```{r}
+rpart.plot(best_tree, type = 2, box.palette = list("Grays", "Reds"))
+```
+
+### Variable importance
+
+```{r}
+best_tree$variable.importance
+```
+### Actual vs Predicted
+```{r}
+table(predicted = predict(best_tree, dpd_val,type = 'class'), actual = dpd_val$diabetes)
+```
+```{r}
+model_selection_df = rbind(model_selection_df,c("Model" = "Tree",
+                            "EST_miscalss" = tree_est_mis,
+                                "VAL_misclas" = tree_val_mis))
+
+model_selection_df
+```
+## Random Forest
+Random forest is a powerful machine learning algorithm that combines the predictions of multiple decision trees to make more accurate predictions or perform classification tasks. It is considered an ensemble learning method because it aggregates the results of multiple models to improve overall performance.
+
+we use it to show the importance of variables and the accuracy of this algorithm and do not use as a final model. 
+```{r}
+# mtry = The number of predictor variables randomly sampled as candidates at each split(sqrt(p) for classification)
+# ntree = The number of trees to grow in the random forest.
+# importance = A logical value indicating whether variable importance measures should be computed.
+# nodesize = The minimum size of terminal nodes.
+set.seed(150)
+forest = randomForest(diabetes ~ ., data = dpd_est, mtry = 3, ntree = 200, 
+                     nodesize = 5, importance = TRUE)
+importance(forest)
+```
+```{r}
+forest_est_pred = predict(forest, dpd_est, type = "class")
+forest_val_pred = predict(forest, dpd_val, type = "class")
+
+forest_est_mis = calc_misclass(dpd_est$diabetes, forest_est_pred)
+forest_val_mis = calc_misclass(dpd_val$diabetes, forest_val_pred)
+cat("misclassification error in Estimation is:", forest_est_mis,"and in Validation is:",forest_val_mis)
+```
+### Actual vs Predicted
+```{r}
+table(predicted = forest_val_pred, actual = dpd_val$diabetes)
+```
+
+```{r}
+model_selection_df = rbind(model_selection_df,c("Model" = "Random forest",
+                            "EST_miscalss" = forest_est_mis,
+                                "VAL_misclas" = forest_val_mis))
+
+model_selection_df
+```
+
+### Variable importance
+```{r}
+varImpPlot(forest)
+```
+for calculate incMSE%, the MSE of the Random Forest model is calculated and recorded as the baseline error. then, for each variable, the Random Forest model is trained with the data shuffled randomly for that particular variable. The MSE is then computed for the shuffled variable. the difference between the MSE of the shuffled variable and the baseline MSE is calculated. This difference represents the increase in MSE due to shuffling the variable. Finally, **the importance of each variable is obtained by dividing the increase in MSE by the baseline MSE.**
+
+now we use the variable importance of random forest for modeling.
+## Regression logestic
+```{r}
+log_reg_1 = multinom(diabetes ~ ., data = dpd_est)
+log_reg_2 = multinom(diabetes ~ blood_glucose_level + HbA1c_level + age, data = dpd_est)
+```
+
+```{r}
+# estimation prediction
+pred_log_reg_est_1 = predict(log_reg_1, dpd_est)
+# validation prediction
+pred_log_reg_val_1 = predict(log_reg_1, dpd_val)
+
+# estimation prediction
+pred_log_reg_est_2 = predict(log_reg_2, dpd_est)
+# validation prediction
+pred_log_reg_val_2 = predict(log_reg_2, dpd_val)
+```
+
+### misclass error
+
+```{r}
+# estimation
+mis_log_reg_est_1 = calc_misclass(dpd_est$diabetes, pred_log_reg_est_1)
+# validation
+mis_log_reg_val_1 = calc_misclass(dpd_val$diabetes, pred_log_reg_val_1)
+
+cat("misclassification error in Estimation is:", mis_log_reg_est_1,"and in Validation is:",mis_log_reg_val_1)
+
+# estimation
+mis_log_reg_est_2 = calc_misclass(dpd_est$diabetes, pred_log_reg_est_2)
+# validation
+mis_log_reg_val_2 = calc_misclass(dpd_val$diabetes, pred_log_reg_val_2)
+
+cat("\nmisclassification error in Estimation is:", mis_log_reg_est_2,"and in Validation is:",mis_log_reg_val_2)
+```
+### Actual vs Predicted
+#### log_reg_1
+```{r}
+table(predicted = pred_log_reg_val_1, actual = dpd_val$diabetes)
+```
+#### log_reg_2
+```{r}
+table(predicted = pred_log_reg_val_2, actual = dpd_val$diabetes)
+```
+
+```{r}
+model_selection_df = rbind(model_selection_df,c("Model" = "Logestic Regression",
+                            "EST_miscalss" = mis_log_reg_est_1,
+                                "VAL_misclas" = mis_log_reg_val_1))
+
+model_selection_df
+```
+
+## LDA
+
+```{r}
+prior_vector = c(mean(dpd_est$diabetes == 0),mean(dpd_est$diabetes == 1))
+
+lda_1 = lda(diabetes ~ ., data = dpd_est, prior = prior_vector)
+
+# prediction
+pred_lda_1_est = predict(lda_1, dpd_est)
+pred_lda_1_val = predict(lda_1, dpd_val)
+# misclass
+mis_lda_1_est = calc_misclass(dpd_est$diabetes, pred_lda_1_est$class)
+mis_lda_1_val = calc_misclass(dpd_val$diabetes, pred_lda_1_val$class)
+
+cat("misclassification error in Estimation is:", mis_lda_1_est,"and in Validation is:",mis_lda_1_val)
+```
+
+```{r}
+model_selection_df = rbind(model_selection_df,c("Model" = "LDA_1",
+                            "EST_miscalss" = mis_lda_1_est,
+                                "VAL_misclas" = mis_lda_1_val))
+
+model_selection_df
+```
+
+### Same probabilities in prior vector
+
+```{r}
+lda_2 = lda(diabetes ~ ., data = dpd_est, prior = c(0.5, 0.5))
+
+# prediction
+pred_lda_2_est = predict(lda_2, dpd_est)
+pred_lda_2_val = predict(lda_2, dpd_val)
+# misclass
+mis_lda_2_est = calc_misclass(dpd_est$diabetes, pred_lda_2_est$class)
+mis_lda_2_val = calc_misclass(dpd_val$diabetes, pred_lda_2_val$class)
+
+cat("misclassification error in Estimation is:", mis_lda_2_est,"and in Validation is:",mis_lda_2_val)
+```
+### Actual vs Predicted
+#### lda_1
+```{r}
+table(predicted = pred_lda_1_val$class, actual = dpd_val$diabetes)
+```
+#### lda_2
+```{r}
+table(predicted = pred_lda_2_val$class, actual = dpd_val$diabetes)
+```
+```{r}
+model_selection_df = rbind(model_selection_df,c("Model" = "LDA_2",
+                            "EST_miscalss" = mis_lda_2_est,
+                                "VAL_misclas" = mis_lda_2_val))
+
+model_selection_df
+```
+
+## QDA
+
+```{r}
+qda_1 = qda(diabetes ~ ., data = dpd_est, prior = prior_vector)
+
+# prediction
+pred_qda_1_est = predict(qda_1, dpd_est)
+pred_qda_1_val = predict(qda_1, dpd_val)
+# misclass
+mis_qda_1_est = calc_misclass(dpd_est$diabetes, pred_qda_1_est$class)
+mis_qda_1_val = calc_misclass(dpd_val$diabetes, pred_qda_1_val$class)
+
+cat("misclassification error in Estimation is:", mis_qda_1_est,"and in Validation is:",mis_qda_1_val)
+```
+
+```{r}
+model_selection_df = rbind(model_selection_df,c("Model" = "QDA_1",
+                            "EST_miscalss" = mis_qda_1_est,
+                                "VAL_misclas" = mis_qda_1_val))
+
+model_selection_df
+```
+
+```{r}
+qda_2 = qda(diabetes ~ ., data = dpd_est, prior = c(0.5, 0.5))
+
+# prediction
+pred_qda_2_est = predict(qda_2, dpd_est)
+pred_qda_2_val = predict(qda_2, dpd_val)
+# misclass
+mis_qda_2_est = calc_misclass(dpd_est$diabetes, pred_qda_2_est$class)
+mis_qda_2_val = calc_misclass(dpd_val$diabetes, pred_qda_2_val$class)
+
+cat("misclassification error in Estimation is:", mis_qda_2_est,"and in Validation is:",mis_qda_2_val)
+```
+
+```{r}
+model_selection_df = rbind(model_selection_df,c("Model" = "QDA_2",
+                            "EST_miscalss" = mis_qda_2_est,
+                                "VAL_misclas" = mis_qda_2_val))
+
+model_selection_df
+```
+### Actual vs Predicted
+#### qda_1
+```{r}
+table(predicted = pred_qda_1_val$class, actual = dpd_val$diabetes)
+```
+#### qda_2
+```{r}
+table(predicted = pred_qda_2_val$class, actual = dpd_val$diabetes)
+```
+## Naive Bayse
+
+```{r}
+navie_bayse = naiveBayes(diabetes ~ .,data = dpd_est, prior = prior_vector)
+
+# prediction
+pred_nba_est = predict(navie_bayse, dpd_est)
+pred_nba_val = predict(navie_bayse, dpd_val)
+# misclass
+mis_nba_est = calc_misclass(dpd_est$diabetes, pred_nba_est)
+mis_nba_val = calc_misclass(dpd_val$diabetes, pred_nba_val)
+
+cat("misclassification error in Estimation is:", mis_nba_est,"and in Validation is:",mis_nba_val)
+```
+### Actual vs Predicted
+```{r}
+table(predicted = pred_nba_val, actual = dpd_val$diabetes)
+```
+
+```{r}
+model_selection_df = rbind(model_selection_df,c("Model" = "Navie_Bayse",
+                            "EST_miscalss" = mis_nba_est,
+                                "VAL_misclas" = mis_nba_val))
+
+model_selection_df
+```
+Best model is random forest but we use it to show its accuracy. now for better accuracy we use k-fold cross validation for this models. 
+
+## K-fold cross validation
+K-fold cross-validation is a technique commonly used in machine learning and statistical modeling to assess the performance and generalization ability of a predictive model. It involves partitioning a dataset into K subsets or "folds" of approximately equal size.
+
+The K-fold cross-validation process can be summarized as follows:
+1.The dataset is divided into K equal-sized subsets or folds.
+2.The model is trained K times, each time using K-1 folds as the training data and the remaining fold as the validation or test data.
+3.For each training iteration, the model is trained on the training data and then evaluated on the validation data.
+4.The performance of the model is recorded for each iteration, typically using a predefined evaluation metric such as accuracy, precision, recall, or mean squared error.
+5.The performance results from the K iterations are averaged to obtain a single performance metric, which represents the overall performance of the model.
+6.Optionally, after selecting the best-performing model, it can be retrained on the entire dataset for final evaluation on a separate, unseen test set.
+
+The main advantage of K-fold cross-validation is that it allows for a more reliable estimate of model performance compared to a single train-test split. It helps to mitigate the impact of dataset variability and provides a more robust evaluation of the model's ability to generalize to new, unseen data. Moreover, K-fold cross-validation aids in assessing the model's stability and identifying potential issues such as overfitting or underfitting.
+```{r}
+dim(dpd_trn)
+```
+there is 963 records.
+```{r}
+k_fold = 10
+
+set.seed(100)
+random_vector = c(rep(1, 97), rep(2, 97), rep(3, 97),rep(4, 96), rep(5, 96), rep(6, 96),rep(7,96), rep(8,96), rep(9,96), rep(10, 96))
+
+random_vector = sample(random_vector)
+
+kfold_trn = dpd_trn
+kfold_trn$folds = random_vector
+
+head(kfold_trn)
+```
+## RMSE data frame 
+```{r}
+misclass_df = data.frame(matrix(NA, nrow = 14, ncol = 11))
+colnames(misclass_df) = c("model","k=1","k=2","k=3","k=4","k=5","k=6","k=7","k=8","k=9","k=10")
+misclass_df
+```
+```{r}
+for(i in 1:k_fold){
+    estimation = kfold_trn[kfold_trn$folds != i,]
+    validation = kfold_trn[kfold_trn$folds == i,]
+    prior_vector = c(mean(estimation$diabetes == 0),mean(estimation$diabetes == 1))
+    # logestic_1
+    fold_log_1 = multinom(diabetes ~ . - folds, data = estimation)
+    log_pred_1 = predict(fold_log_1, validation)
+    log_mis_1 = calc_misclass(validation$diabetes, log_pred_1)
+    misclass_df[1,(i+1)] = log_mis_1
+    # logestic_2    
+    fold_log_2 = multinom(diabetes ~ blood_glucose_level + HbA1c_level + age, data = estimation)
+    log_pred_2 = predict(fold_log_2, validation)
+    log_mis_2 = calc_misclass(validation$diabetes, log_pred_2)
+    misclass_df[2,(i+1)] = log_mis_2    
+    # lda_1
+    fold_lda_1 = lda(diabetes ~ . - folds, data = estimation, prior = prior_vector)
+    lda_pred_1 = predict(fold_lda_1, validation)
+    lda_mis_1 = calc_misclass(validation$diabetes, lda_pred_1$class)
+    misclass_df[3,(i+1)] = lda_mis_1
+    # lda_2
+    fold_lda_2 = lda(diabetes ~ . - folds, data = estimation, prior = c(0.5,0.5))
+    lda_pred_2 = predict(fold_lda_2, validation)
+    lda_mis_2 = calc_misclass(validation$diabetes, lda_pred_2$class)
+    misclass_df[4,(i+1)] = lda_mis_2
+    # qda_1
+    fold_qda_1 = qda(diabetes ~ . - folds, data = estimation, prior = prior_vector)
+    qda_pred_1 = predict(fold_qda_1, validation)
+    qda_mis_1 = calc_misclass(validation$diabetes, qda_pred_1$class)
+    misclass_df[5,(i+1)] = qda_mis_1   
+    # qda_2
+    fold_qda_2 = qda(diabetes ~ . - folds, data = estimation, prior = c(0.5,0.5))
+    qda_pred_2 = predict(fold_qda_2, validation)
+    qda_mis_2 = calc_misclass(validation$diabetes, qda_pred_2$class)
+    misclass_df[6,(i+1)] = qda_mis_2
+    # Naive Bayse
+    fold_nba = naiveBayes(diabetes ~ . - folds,data = estimation, prior = prior_vector)
+    nba_pred = predict(fold_nba, validation)
+    nba_mis = calc_misclass(validation$diabetes, nba_pred)
+    misclass_df[7,(i+1)] = nba_mis
+    # Tree
+    fold_tree = rpart(diabetes ~ . - folds, data = estimation, cp = best_cp, minsplit = best_minsplit)
+    tree_pred = predict(fold_tree, validation, type = "class")
+    tree_mis = calc_misclass(validation$diabetes, tree_pred)
+    misclass_df[8,(i+1)] = tree_mis
+    }
+```
+```{r}
+for(i in 1:k_fold){
+  estimation = kfold_trn[kfold_trn$folds != i,]
+  validation = kfold_trn[kfold_trn$folds == i,]
+  est_scl = estimation
+
+  est_scl$age = scale(est_scl$age)
+  age.center = attr(est_scl$age,"scaled:center")
+  age.scale = attr(est_scl$age,"scaled:scale")
+
+  est_scl$bmi = scale(est_scl$bmi)
+  bmi.center = attr(est_scl$bmi,"scaled:center")
+  bmi.scale = attr(est_scl$bmi,"scaled:scale")
+
+  est_scl$HbA1c_level = scale(est_scl$HbA1c_level)
+  HbA1c_level.center = attr(est_scl$HbA1c_level,"scaled:center")
+  HbA1c_level.scale = attr(est_scl$HbA1c_level,"scaled:scale")
+
+  est_scl$blood_glucose_level = scale(est_scl$blood_glucose_level)
+  blood_glucose_level.center = attr(est_scl$blood_glucose_level,"scaled:center")
+  blood_glucose_level.scale = attr(est_scl$blood_glucose_level,"scaled:scale")
+
+  val_scl = validation
+
+  val_scl$age = scale(val_scl$age, center = age.center, scale = age.scale)
+  val_scl$bmi = scale(val_scl$bmi, center = bmi.center, scale = bmi.scale)
+  val_scl$HbA1c_level = scale(val_scl$HbA1c_level, center = HbA1c_level.center, scale = HbA1c_level.scale)
+  val_scl$blood_glucose_level = scale(val_scl$blood_glucose_level, center = blood_glucose_level.center,scale = blood_glucose_level.scale)
+  
+  knn_list = list(
+    k_9 = knn3(diabetes ~ . - folds, data = est_scl, k = 9),
+    k_10 = knn3(diabetes ~ . - folds, data = est_scl, k = 10),
+    k_11 = knn3(diabetes ~ . - folds, data = est_scl, k = 11),
+    k_12 = knn3(diabetes ~ . - folds, data = est_scl, k = 12),
+    k_13 = knn3(diabetes ~ . - folds, data = est_scl, k = 13),
+    k_14 = knn3(diabetes ~ . - folds, data = est_scl, k = 14)
+  )
+  knn_pred = lapply(knn_list, predict, val_scl, type = "class")  
+  knn_mis = sapply(knn_pred, calc_misclass, val_scl$diabetes)
+  misclass_df[9,(i+1)] = knn_mis[1]
+  misclass_df[10,(i+1)] = knn_mis[2]
+  misclass_df[11,(i+1)] = knn_mis[3]
+  misclass_df[12,(i+1)] = knn_mis[4]
+  misclass_df[13,(i+1)] = knn_mis[5]
+  misclass_df[14,(i+1)] = knn_mis[6]
+}
+```
+
+```{r}
+misclass_df[,1] = c("log_reg_1","log_reg_2","lda_1","lda_2","qda_1","qda_2","Naive Bayse","tree","knn(k=9)","knn(k=10)","knn(k=11)","knn(k=12)","knn(k=13)","knn(k=14)")
+misclass_df$mean = rowMeans(misclass_df[,-1])
+misclass_df
+```
+# Best model
+best model is tree model based on 10-fold cross validation.
+```{r}
+final_mod = rpart(diabetes ~ ., data = dpd_trn, cp = best_cp, minsplit = best_minsplit)
+
+# Prediction
+final_trn_pred = predict(final_mod, dpd_trn, type = "class")
+final_tst_pred = predict(final_mod, dpd_tst, type = "class")
+# missclassification
+final_trn_mis = calc_misclass(dpd_trn$diabetes, final_trn_pred)
+final_tst_mis = calc_misclass(dpd_tst$diabetes, final_tst_pred)
+cat("misclassification error in train data set is:", final_trn_mis,
+    "\nmisclassification error in test data set is:", final_tst_mis)
+```
+## Actual vs Predicted
+```{r}
+table(predicted = final_tst_pred, actual = dpd_tst$diabetes)
+```
+we have more misclass in healthy people. as we see, we have 17% missclassification in healthy people that we have diagnosed diabetes. but in people with diabetes, we have misdiagnosed 17 people which contains 14% of people with diabetes.
+
+
+
+
+
+
+
+
+
